@@ -1,26 +1,26 @@
 # ThinkTS 编码规则
 
-## 单文件行数限制
-
-- **单文件总行数 ≤ 300 行**。超过必须拆分文件或提取子模块。
-- 拆分原则：按职责垂直拆分（如 HTTP 上下文、Cron、健康检查、中间件加载各为独立模块）。
-- 每次改动必须有独立的、可 review 的 diff。
-- 重构类改动：行为不变，不写新测试；新增功能或修复 bug：必须写测试覆盖。
+## 单文件行数
+- 单文件 ≤ 200 行。超过必须拆分。
+- 拆分原则：按职责垂直拆分（HTTP、ACL、Builder、Ops 各为独立模块）。
 
 ## 代码风格
+- 优先顶层 `import`，避免运行时 `require()`（条件加载除外）。
+- 公共工具函数提取到 `src/utils.ts`，禁止多文件复制粘贴。
+- 热路径（请求处理链）禁止创建临时对象（`new URL()`, `new TextEncoder()`）。
+- 缓存策略：按实体全局缓存，禁止按实例重复缓存。
 
-- 优先使用顶层 `import`，避免运行时 `require()`（除非是条件加载或循环依赖不得已）。
-- 公共工具函数（如 `toPascalCase`、`toKebabCase`）必须提取到 `src/utils.ts`，禁止多文件复制粘贴。
-- 高频调用路径（请求处理链）禁止在热路径上创建临时对象（如 `new URL()`、`new TextEncoder()`）。
-- 缓存策略：按实体（表名、key）全局缓存，禁止按实例重复缓存相同数据。
+## 类型安全
+- 公共 API MUST 有显式类型签名，不允许 `any`。
+- AVOID `as unknown as` — 如果需要，说明接口设计有问题。
+- 函数返回值 MUST 显式标注类型，不依赖推断。
 
 ## 性能红线
+- 密码学操作必须在初始化时预计算，请求时复用。
+- Router handler 禁止在请求时动态 `require()`。
+- Model 层必须用连接池复用，禁止每次操作创建新连接。
 
-- 密码学操作（`crypto.subtle.importKey`、`crypto.subtle.sign`）必须在中间件/服务创建时预计算，请求时复用。
-- Session / Cache 写操作必须检测数据是否实际变更，未变更时跳过写入。
-- Router handler 禁止在请求时动态 `require()` 模块。
-
-## 回滚安全
-
-- 每个优化必须有 before/after benchmark 或至少一个可观测指标（响应时间、DB 查询次数、Redis 写入次数）。
-- 改动后必须跑通现有测试（如有）或手动验证核心路径（health、login、CRUD）。
+## 验证要求
+- 修改框架代码后 MUST 运行 `bun test`（90 tests）。
+- 修改后 MUST 在 iotbiz 中验证 API 正常（open/index + DSL routes）。
+- 禁止提交未经验证的代码。
