@@ -4,6 +4,7 @@ import { createAdminHandlers } from "../dsl-model/admin";
 import { BaseService, bindServiceContext } from "../service";
 import type { RouteTable } from "./table";
 import { executeDslAction } from "../dsl-model/executor";
+
 export function parseModelRoute(name: string): { module: string; resource: string; path: string } {
   const parts = name.split("_");
   if (parts.length === 1) {
@@ -19,24 +20,18 @@ function escapeRegExp(str: string): string {
 }
 
 const ACTION_METHODS: Record<string, string> = {
-  list: "GET",
-  create: "POST",
-  get: "GET",
-  update: "POST",
-  delete: "POST",
-  page: "GET",
-  search: "GET",
+  list: "GET", create: "POST", get: "GET", update: "POST",
+  delete: "POST", page: "GET", search: "GET",
 };
 
 const ACTION_METHOD_MAP: Record<string, string> = {
-  page: "pageAction",
-  search: "searchAction",
+  page: "pageAction", search: "searchAction",
 };
 
 function createDslActionHandler(
   action: string,
   entry: DslModelEntry,
-  service?: DslServiceEntry
+  service?: DslServiceEntry,
 ): (ctx: ThinkContext) => Promise<unknown> {
   return async (ctx: ThinkContext) => {
     const { module, resource } = parseModelRoute(entry.name);
@@ -60,11 +55,7 @@ function createDslActionHandler(
       for (const key of ["where", "order", "field"]) {
         const val = opts[key];
         if (typeof val === "string" && (val.startsWith("{") || val.startsWith("["))) {
-          try {
-            opts[key] = JSON.parse(val);
-          } catch {
-            // leave as string
-          }
+          try { opts[key] = JSON.parse(val); } catch { /* leave as string */ }
         }
       }
     } else {
@@ -89,49 +80,35 @@ export function registerDslModelRoutes(table: RouteTable, dslData: DslAppData): 
     const pageHandler = createDslActionHandler("page", entry, service);
     const searchHandler = createDslActionHandler("search", entry, service);
 
-    table.exact.set(`${path}/list`, {
-      match: `${path}/list`,
-      type: "dsl-resource",
-      module: parseModelRoute(name).module,
-      controller: parseModelRoute(name).resource,
-      action: "list",
+    const routeMeta = parseModelRoute(name);
+
+    // Static routes — also inserted into radix tree for O(k) matching
+    const staticEntry = (action: string, handler: ReturnType<typeof createDslActionHandler>) => ({
+      match: `${path}/${action}`,
+      type: "dsl-resource" as const,
+      module: routeMeta.module,
+      controller: routeMeta.resource,
+      action,
       resource: name,
-      handler: listHandler,
-    });
-    table.exact.set(`${path}/create`, {
-      match: `${path}/create`,
-      type: "dsl-resource",
-      module: parseModelRoute(name).module,
-      controller: parseModelRoute(name).resource,
-      action: "create",
-      resource: name,
-      handler: createHandler,
-    });
-    table.exact.set(`${path}/page`, {
-      match: `${path}/page`,
-      type: "dsl-resource",
-      module: parseModelRoute(name).module,
-      controller: parseModelRoute(name).resource,
-      action: "page",
-      resource: name,
-      handler: pageHandler,
-    });
-    table.exact.set(`${path}/search`, {
-      match: `${path}/search`,
-      type: "dsl-resource",
-      module: parseModelRoute(name).module,
-      controller: parseModelRoute(name).resource,
-      action: "search",
-      resource: name,
-      handler: searchHandler,
+      handler,
     });
 
+    const listEntry = staticEntry("list", listHandler);
+    const createEntry = staticEntry("create", createHandler);
+    const pageEntry = staticEntry("page", pageHandler);
+    const searchEntry = staticEntry("search", searchHandler);
+
+    table.exact.set(`${path}/list`, listEntry);
+    table.exact.set(`${path}/create`, createEntry);
+    table.exact.set(`${path}/page`, pageEntry);
+    table.exact.set(`${path}/search`, searchEntry);
+
     if (tableEntry) {
-      table.exact.set(`${path}/table`, {
+      const tableRouteEntry = {
         match: `${path}/table`,
-        type: "dsl-resource",
-        module: parseModelRoute(name).module,
-        controller: parseModelRoute(name).resource,
+        type: "dsl-resource" as const,
+        module: routeMeta.module,
+        controller: routeMeta.resource,
         action: "table",
         resource: name,
         handler: async (ctx: ThinkContext) => {
@@ -141,37 +118,35 @@ export function registerDslModelRoutes(table: RouteTable, dslData: DslAppData): 
           }
           return { errno: 0, data: tableEntry.table };
         },
-      });
+      };
+      table.exact.set(`${path}/table`, tableRouteEntry);
+      table.radix.insert(`${path}/table`, tableRouteEntry);
     }
 
+    // Radix tree entries for parameterized routes (O(k) matching)
+    const getRadixEntry = { ...staticEntry("get", getHandler), match: `${path}/get/:id` };
+    const updateRadixEntry = { ...staticEntry("update", updateHandler), match: `${path}/update/:id` };
+    const deleteRadixEntry = { ...staticEntry("delete", deleteHandler), match: `${path}/delete/:id` };
+    table.radix.insert(`${path}/get/:id`, getRadixEntry);
+    table.radix.insert(`${path}/update/:id`, updateRadixEntry);
+    table.radix.insert(`${path}/delete/:id`, deleteRadixEntry);
+
+    // Regex patterns for backward compat
     const baseRegex = escapeRegExp(path);
-    const routeMeta = parseModelRoute(name);
     table.patterns.push({
       match: new RegExp(`^${baseRegex}/get/(?<id>[^/]+)$`),
-      type: "dsl-resource",
-      module: routeMeta.module,
-      controller: routeMeta.resource,
-      action: "get",
-      resource: name,
-      handler: getHandler,
+      type: "dsl-resource", module: routeMeta.module, controller: routeMeta.resource,
+      action: "get", resource: name, handler: getHandler,
     });
     table.patterns.push({
       match: new RegExp(`^${baseRegex}/update/(?<id>[^/]+)$`),
-      type: "dsl-resource",
-      module: routeMeta.module,
-      controller: routeMeta.resource,
-      action: "update",
-      resource: name,
-      handler: updateHandler,
+      type: "dsl-resource", module: routeMeta.module, controller: routeMeta.resource,
+      action: "update", resource: name, handler: updateHandler,
     });
     table.patterns.push({
       match: new RegExp(`^${baseRegex}/delete/(?<id>[^/]+)$`),
-      type: "dsl-resource",
-      module: routeMeta.module,
-      controller: routeMeta.resource,
-      action: "delete",
-      resource: name,
-      handler: deleteHandler,
+      type: "dsl-resource", module: routeMeta.module, controller: routeMeta.resource,
+      action: "delete", resource: name, handler: deleteHandler,
     });
   }
 }
@@ -186,17 +161,12 @@ function bindServiceMethod(ctx: ThinkContext, services: Record<string, unknown>,
 }
 
 function dslApiPathToRegex(path: string): RegExp {
-  // Convert :param and *wildcard segments into a regex with named groups.
-  const pattern = path
-    .replace(/:([^/]+)/g, "(?<$1>[^/]+)")
-    .replace(/\*/g, ".*");
+  const pattern = path.replace(/:([^/]+)/g, "(?<$1>[^/]+)").replace(/\*/g, ".*");
   return new RegExp(`^${pattern}$`);
 }
 
 export function registerDslApiRoutes(
-  table: RouteTable,
-  dslData: DslAppData,
-  services: Record<string, unknown>
+  table: RouteTable, dslData: DslAppData, services: Record<string, unknown>,
 ): void {
   for (const entry of Object.values(dslData.apis)) {
     for (const route of entry.routes) {
@@ -210,16 +180,12 @@ export function registerDslApiRoutes(
         }
         if (route.handler.startsWith("service.")) {
           const method = route.handler.slice("service.".length);
-          const service = dslData.services[entry.name]?.hooks;
-          const fn = service?.[method] as ((opts: Record<string, unknown>, think: unknown) => unknown) | undefined;
-          if (!fn) {
-            ctx.set.status = 404;
-            return { errno: 404, errmsg: `Service method ${method} not found` };
-          }
+          const svc = dslData.services[entry.name]?.hooks;
+          const fn = svc?.[method] as ((opts: Record<string, unknown>, think: unknown) => unknown) | undefined;
+          if (!fn) { ctx.set.status = 404; return { errno: 404, errmsg: `Service method ${method} not found` }; }
           const opts: Record<string, unknown> = { ...(ctx.params ?? {}), ...(ctx.body as Record<string, unknown> ?? {}) };
           const serviceContext = bindServiceContext(new BaseService(), ctx, {
-            servicePath: entry.path,
-            serviceModelName: entry.name,
+            servicePath: entry.path, serviceModelName: entry.name,
           });
           const result = await fn.call(serviceContext, opts, ctx.think);
           return result && typeof result === "object" && "errno" in result ? result : { errno: 0, data: result };
@@ -229,36 +195,26 @@ export function registerDslApiRoutes(
       const routeMeta = parseModelRoute(entry.name);
       if (route.path.includes(":") || route.path.includes("*")) {
         table.patterns.push({
-          match: dslApiPathToRegex(fullPath),
-          type: "dsl-api",
-          module: routeMeta.module,
-          controller: routeMeta.resource,
-          action: route.method.toLowerCase(),
-          resource: entry.name,
-          handler,
+          match: dslApiPathToRegex(fullPath), type: "dsl-api",
+          module: routeMeta.module, controller: routeMeta.resource,
+          action: route.method.toLowerCase(), resource: entry.name, handler,
         });
       } else {
         table.exact.set(fullPath, {
-          match: fullPath,
-          type: "dsl-api",
-          module: routeMeta.module,
-          controller: routeMeta.resource,
-          action: route.method.toLowerCase(),
-          resource: entry.name,
-          handler,
+          match: fullPath, type: "dsl-api",
+          module: routeMeta.module, controller: routeMeta.resource,
+          action: route.method.toLowerCase(), resource: entry.name, handler,
         });
       }
     }
   }
 }
+
 export function registerDslAdminRoutes(table: RouteTable, dslData: DslAppData): void {
   const admin = createAdminHandlers(dslData);
   table.exact.set("/admin/api/tables", {
-    match: "/admin/api/tables",
-    type: "dsl-admin",
-    module: "admin",
-    controller: "api/tables",
-    action: "list",
+    match: "/admin/api/tables", type: "dsl-admin",
+    module: "admin", controller: "api/tables", action: "list",
     handler: async () => admin.tablesAction(),
   });
 }

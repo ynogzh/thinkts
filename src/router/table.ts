@@ -4,9 +4,13 @@ import { toKebabCase, toPascalCase } from "../utils";
 import { createHandler, normalizePath, type ParsedRoute, type RouteEntry } from "./handler";
 import { createResourceHandler } from "./resource";
 import { registerDslModelRoutes, registerDslApiRoutes, registerDslAdminRoutes } from "./dsl";
+import { RadixTree } from "./radix";
+
 export interface RouteTable {
   exact: Map<string, RouteEntry>;
   patterns: RouteEntry[];
+  /** Radix tree for O(k) parameterized route matching */
+  radix: RadixTree;
 }
 
 export function parseRouterRules(rules: unknown[]): RouterRule[] {
@@ -27,15 +31,21 @@ export function parseRouterRules(rules: unknown[]): RouterRule[] {
   });
 }
 
+function addToRadix(path: string, entry: RouteEntry, radix: RadixTree): void {
+  // Only add structured paths (not wildcards or regex) to radix tree
+  if (path.includes("*") || path.startsWith("^") || path.endsWith("$")) return;
+  radix.insert(path, entry);
+}
+
 export function buildRouteTable(
   config: AppConfig,
   controllers: Record<string, unknown>,
   services: Record<string, unknown>,
   logics: Record<string, unknown>,
   customRules?: RouterRule[],
-  dslData?: DslAppData
+  dslData?: DslAppData,
 ): RouteTable {
-  const table: RouteTable = { exact: new Map(), patterns: [] };
+  const table: RouteTable = { exact: new Map(), patterns: [], radix: new RadixTree() };
   const defaultAction = config.defaultAction ?? "index";
 
   if (dslData) {
@@ -62,6 +72,7 @@ export function buildRouteTable(
         const entry: RouteEntry = { match: rule.match, type: "resource", resource: rule.target, handler };
         if (typeof rule.match === "string" && !rule.match.includes("*")) {
           table.exact.set(rule.match, entry);
+          addToRadix(rule.match, entry, table.radix);
         } else {
           table.patterns.push(entry);
         }
@@ -89,6 +100,7 @@ export function buildRouteTable(
 
       if (typeof rule.match === "string" && !rule.match.includes("*")) {
         table.exact.set(rule.match, entry);
+        addToRadix(rule.match, entry, table.radix);
       } else {
         table.patterns.push(entry);
       }
@@ -132,8 +144,10 @@ export function buildRouteTable(
         handler,
       };
       table.exact.set(path, entry);
+      addToRadix(path, entry, table.radix);
       if (action === defaultAction) {
         table.exact.set(`/${servicePath}`, { ...entry, match: `/${servicePath}` });
+        addToRadix(`/${servicePath}`, entry, table.radix);
       }
       table.patterns.push({ ...entry, match: path + "/*" });
     }
@@ -165,8 +179,10 @@ export function buildRouteTable(
         handler: createHandler(parsed, controllers, services, logics),
       };
       table.exact.set(path, entry);
+      addToRadix(path, entry, table.radix);
       if (action === defaultAction) {
         table.exact.set(`/${controllerPath}`, { ...entry, match: `/${controllerPath}` });
+        addToRadix(`/${controllerPath}`, entry, table.radix);
       }
       table.patterns.push({ ...entry, match: path + "/*" });
     }
@@ -174,10 +190,9 @@ export function buildRouteTable(
 
   const homeHandler = createHandler(
     { module: "home", controller: "index", action: defaultAction, extra: [] },
-    controllers, services, logics
+    controllers, services, logics,
   );
 
-  // Default home route
   const homeEntry: RouteEntry = {
     match: "/",
     module: "home",
@@ -193,10 +208,19 @@ export interface RouteMatch {
   entry: RouteEntry;
   params?: Record<string, string>;
 }
+
 export function matchRoute(table: RouteTable, pathname: string): RouteMatch | undefined {
   const normalized = normalizePath(pathname);
+
+  // 1. Exact match — O(1)
   const exact = table.exact.get(normalized);
   if (exact) return { entry: exact };
+
+  // 2. Radix tree — O(k) where k = number of URL segments
+  const radixMatch = table.radix.match(normalized);
+  if (radixMatch) return radixMatch;
+
+  // 3. Linear fallback for wildcard/regex patterns — O(n)
   for (const entry of table.patterns) {
     if (typeof entry.match === "string") {
       if (entry.match.endsWith("*")) {
@@ -213,7 +237,6 @@ export function matchRoute(table: RouteTable, pathname: string): RouteMatch | un
       if (m) {
         const params: Record<string, string> = {};
         if (m.groups) Object.assign(params, m.groups);
-        // named groups from regex
         for (let i = 1; i < m.length; i++) {
           if (m[i] !== undefined) params[String(i - 1)] = m[i];
         }
@@ -236,7 +259,7 @@ export function registerCustomRoutes(
   config: AppConfig,
   controllers: Record<string, unknown>,
   services: Record<string, unknown>,
-  logics: Record<string, unknown>
+  logics: Record<string, unknown>,
 ): CustomRoute[] {
   const routes: CustomRoute[] = [];
   const defaultAction = config.defaultAction ?? "index";
