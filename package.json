@@ -1,0 +1,44 @@
+{
+  "name": "thinkts",
+  "version": "1.0.0",
+  "description": "ThinkTS - A TypeScript web framework built on Bun native APIs, inspired by ThinkJS",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./dsl-model": {
+      "import": "./src/dsl-model/index.ts",
+      "types": "./src/dsl-model/index.ts"
+    }
+  },
+    "build": "tsc",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
+    "bench": "bun bench/http-stress.ts"
+  },
+  "keywords": [
+    "framework",
+    "web",
+    "typescript",
+    "bun",
+    "native"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "reflect-metadata": "^0.2.2",
+    "valibot": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
