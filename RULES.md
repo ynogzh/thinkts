@@ -56,7 +56,7 @@
 - 一个提交只做一件事：fix、feat、refactor、chore 不混在一起
 - 提交信息格式：`<type>(<scope>): <描述>`
   - type: feat / fix / refactor / perf / chore / test
-  - scope: thinkts / cli / iotbiz / admin / api
+  - scope: thinkts / cli / saas / iotbiz / admin / api
   - 描述用英文，简洁说明做了什么、为什么
 
 ### 提交时机
@@ -110,25 +110,30 @@
 - admin 中不能有业务特定的硬编码数据
 - 所有 admin 页面 MUST 通过配置驱动（catalog / menu / resource）
 
-## 6. 项目间协同
+## 6. 项目层级与决策权
 
-### 依赖关系
+### 项目层级
 ```
-iotbiz → thinkts (framework)
-iotbiz → thinkts-cli (generated DSL)
+thinkts-saas (产品) ← 最高优先级，一切服务于它
+    ├── thinkts (框架) ← 可以被 thinkts-saas 的需求修改
+    └── thinkts-cli (工具) ← 可以被 thinkts-saas 的需求修改
 ```
 
-- 修改 thinkts 后，先在 iotbiz 中验证，再提交 thinkts
-- 修改 CLI 生成逻辑后，先在 iotbiz 中重新生成并对比差异
+- **thinkts-saas 是最终交付物**。如果 thinkts 或 thinkts-cli 的实现阻碍了 thinkts-saas 的目标，MUST 修改框架/工具。
+- thinkts 和 thinkts-cli 没有"不能改"的禁区 — 开发期一切可改。
+- BUT: 修改前 MUST 评估影响范围，修改后 MUST 跑全部测试。
 
-### 版本管理
-- thinkts 和 thinkts-cli 独立发版
-- iotbiz 是应用项目，不参与框架发版
-- 模板改进属于 thinkts-cli 的范畴
+### Git 仓库
+| 仓库 | URL |
+|------|-----|
+| thinkts | https://github.com/ynogzh/thinkts |
+| thinkts-cli | https://github.com/ynogzh/thinkts-cli |
+| thinkts-saas | https://github.com/ynogzh/thinkts-saas |
+| iotbiz | https://github.com/ynogzh/iotbiz |
 
-## 7. 性能
-
-- AVOID 不必要的 `Object.entries` 循环 — 用 `for...in` 或直接属性访问
-- 框架启动路径 AVOID 同步 `readFileSync` 大量文件 — 按需加载
-- Model 层 MUST 用连接池复用 DB 连接，禁止每次操作创建新连接
-- Admin 的 Next.js 构建 SHOULD 生成静态页面（SSG）而非全量 SSR
+### 验证链路
+```
+改 thinkts → bun test (thinkts) → iotbiz API 验证 → 通过才提交
+改 CLI → bun test (CLI) → thinkts new test-app → 通过才提交
+改 thinkts-saas 插件 → thinkts-saas 自验证
+```

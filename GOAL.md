@@ -44,57 +44,46 @@ thinkts-saas/admin/
 └── 系统监控     ← 租户用量、API 调用量、错误率
 ```
 
-### 通用插件池
+### 插件 Monorepo（仿 NocoBase packages/ 结构）
 
-所有插件**必须是 SaaS 通用的**，不能有业务特定逻辑。
+所有插件在一个 monorepo 里，每个插件是 `packages/` 下的独立目录：
 
 ```
-thinkts-saas/plugins/
-├── tenant/           ← 多租户管理
-│   ├── plugin.ts
-│   ├── model.ts      ← tenant, tenant_module
-│   └── admin/        ← 租户管理页面
-│
-├── identity/         ← 用户、部门、登录
-│   ├── plugin.ts
-│   ├── model.ts      ← user, dept, login_log
-│   └── admin/
-│
-├── permission/       ← 角色、权限、菜单、数据范围
-│   ├── plugin.ts
-│   └── model.ts      ← role, permission, menu, data_scope
-│
-├── trade/            ← 通用交易订单
-│   ├── plugin.ts
-│   └── model.ts      ← order, order_item, settle_order
-│
-├── payment/          ← 支付渠道、支付单、退款
-│   ├── plugin.ts
-│   └── model.ts      ← payment_channel, payment_order, refund
-│
-├── promote/          ← 优惠券、代理、佣金
-│   ├── plugin.ts
-│   └── model.ts      ← coupon_template, agent, commission_rule
-│
-├── cms/              ← 内容管理（文章、分类、广告位）
-│   ├── plugin.ts
-│   └── model.ts
-│
-├── dashboard/        ← 运营看板
-│   ├── plugin.ts
-│   └── model.ts
-│
-├── event/            ← 事件中心、Webhook
-│   ├── plugin.ts
-│   └── model.ts
-│
-├── workflow/         ← 工作流引擎
-│   ├── plugin.ts
-│   └── model.ts
-│
-└── audit/            ← 审计日志
-    ├── plugin.ts
-    └── model.ts
+thinkts-saas/                       ← monorepo 根
+├── package.json                     ← workspaces: ["packages/*"]
+├── thinkts.config.ts                ← 全局配置
+├── admin/                           ← SaaS 管理后台
+│   ├── pages/
+│   │   ├── tenants/                 ← 租户管理
+│   │   ├── packages/                ← 套餐管理
+│   │   ├── plugins/                 ← 插件市场
+│   │   └── products/                ← 产品管理
+│   └── layout.tsx
+├── packages/                        ← 通用插件池（每个 = 独立可复用模块）
+│   ├── tenant/
+│   │   ├── package.json             ← { "name": "@thinkts/tenant", "version": "1.0.0" }
+│   │   ├── plugin.ts                ← 自声明
+│   │   ├── model.ts
+│   │   ├── service.ts
+│   │   ├── migrations/
+│   │   └── admin/                   ← 插件自带后台页面
+│   ├── identity/
+│   ├── permission/
+│   ├── trade/
+│   ├── payment/
+│   ├── promote/
+│   ├── cms/
+│   ├── dashboard/
+│   ├── event/
+│   ├── workflow/
+│   └── audit/
+├── apps/                            ← 组装出的产品（引用 packages/ 下的插件）
+│   └── iotbiz/                      ← 第一个产品
+│       ├── thinkts.config.ts        ← plugins: ["@thinkts/tenant", "@thinkts/identity", ...]
+│       ├── src/iotbiz/              ← iotbiz 特有业务模块
+│       └── admin/                   ← iotbiz 特有后台页面
+├── bun.lock
+└── README.md
 ```
 
 ### iotbiz — 第一个组装产品
