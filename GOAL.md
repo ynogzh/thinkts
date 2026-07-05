@@ -50,38 +50,27 @@ thinkts-saas/admin/
 
 ```
 thinkts-saas/                       ← monorepo 根
-├── package.json                     ← workspaces: ["packages/*"]
-├── thinkts.config.ts                ← 全局配置
+├── package.json                     ← workspaces: ["packages/*", "apps/*"]
 ├── admin/                           ← SaaS 管理后台
-│   ├── pages/
-│   │   ├── tenants/                 ← 租户管理
-│   │   ├── packages/                ← 套餐管理
-│   │   ├── plugins/                 ← 插件市场
-│   │   └── products/                ← 产品管理
-│   └── layout.tsx
-├── packages/                        ← 通用插件池（每个 = 独立可复用模块）
-│   ├── tenant/
-│   │   ├── package.json             ← { "name": "@thinkts/tenant", "version": "1.0.0" }
-│   │   ├── plugin.ts                ← 自声明
-│   │   ├── model.ts
-│   │   ├── service.ts
-│   │   ├── migrations/
-│   │   └── admin/                   ← 插件自带后台页面
-│   ├── identity/
-│   ├── permission/
-│   ├── trade/
-│   ├── payment/
-│   ├── promote/
-│   ├── cms/
-│   ├── dashboard/
-│   ├── event/
-│   ├── workflow/
-│   └── audit/
-├── apps/                            ← 组装出的产品（引用 packages/ 下的插件）
-│   └── iotbiz/                      ← 第一个产品
-│       ├── thinkts.config.ts        ← plugins: ["@thinkts/tenant", "@thinkts/identity", ...]
+├── packages/                        ← 所有包（框架 + CLI + 插件）
+│   ├── thinkts/                     ← 框架引擎
+│   ├── thinkts-cli/                 ← CLI 工具
+│   ├── tenant/                      ← @thinkts/tenant
+│   ├── identity/                    ← @thinkts/identity
+│   ├── permission/                  ← @thinkts/permission
+│   ├── trade/                       ← @thinkts/trade
+│   ├── payment/                     ← @thinkts/payment
+│   ├── promote/                     ← @thinkts/promote
+│   ├── cms/                         ← @thinkts/cms
+│   ├── dashboard/                   ← @thinkts/dashboard
+│   ├── event/                       ← @thinkts/event
+│   ├── workflow/                    ← @thinkts/workflow
+│   └── audit/                       ← @thinkts/audit
+├── apps/                            ← 组装出的产品
+│   └── iotbiz/                      ← 共享设备支付平台
+│       ├── thinkts.config.ts
 │       ├── src/iotbiz/              ← iotbiz 特有业务模块
-│       └── admin/                   ← iotbiz 特有后台页面
+│       └── admin/
 ├── bun.lock
 └── README.md
 ```

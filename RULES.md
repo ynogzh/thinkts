@@ -114,9 +114,12 @@
 
 ### 项目层级
 ```
-thinkts-saas (产品) ← 最高优先级，一切服务于它
-    ├── thinkts (框架) ← 可以被 thinkts-saas 的需求修改
-    └── thinkts-cli (工具) ← 可以被 thinkts-saas 的需求修改
+thinkts-saas/ (monorepo 根)
+├── packages/
+│   ├── thinkts/          ← 框架
+│   ├── thinkts-cli/      ← CLI
+│   └── tenant, identity, ... ← 插件
+└── apps/iotbiz/          ← 产品
 ```
 
 - **thinkts-saas 是最终交付物**。如果 thinkts 或 thinkts-cli 的实现阻碍了 thinkts-saas 的目标，MUST 修改框架/工具。
